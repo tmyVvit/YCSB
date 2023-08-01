@@ -156,6 +156,18 @@ public class CoreWorkload extends Workload {
   protected boolean readallfields;
 
   /**
+   * The name of the property for the number of fields to read if readallfields=false
+   */
+  public static final String READ_FIELDS_COUNT_PROPERTY = "readfieldscount";
+
+  /**
+   * the default value for the readfieldscount
+   */
+  public static final String READ_FIELDS_COUNT_DEFAULT = "1";
+
+  protected int readfieldcount;
+
+  /**
    * The name of the property for determining how to read all the fields when readallfields is true.
    * If set to true, all the field names will be passed into the underlying client. If set to false,
    * null will be passed into the underlying client. When passed a null, some clients may retrieve
@@ -460,6 +472,7 @@ public class CoreWorkload extends Workload {
 
     readallfields = Boolean.parseBoolean(
         p.getProperty(READ_ALL_FIELDS_PROPERTY, READ_ALL_FIELDS_PROPERTY_DEFAULT));
+    readfieldcount = Integer.parseInt(p.getProperty(READ_FIELDS_COUNT_PROPERTY, READ_FIELDS_COUNT_DEFAULT));
     readallfieldsbyname = Boolean.parseBoolean(
         p.getProperty(READ_ALL_FIELDS_BY_NAME_PROPERTY, READ_ALL_FIELDS_BY_NAME_PROPERTY_DEFAULT));
     writeallfields = Boolean.parseBoolean(
@@ -719,6 +732,18 @@ public class CoreWorkload extends Workload {
     return keynum;
   }
 
+  private HashSet<String> readFields() {
+    // read fields start from a random index
+    int start = fieldchooser.nextValue().intValue();
+    HashSet<String> fields = new HashSet<>();
+    for (int i = 0; i < readfieldcount; i++) {
+      String fieldname = fieldnames.get(start);
+      fields.add(fieldname);
+      start = (int) ((start + 1) % fieldcount);
+    }
+    return fields;
+  }
+
   public void doTransactionRead(DB db) {
     // choose a random key
     long keynum = nextKeynum();
@@ -728,11 +753,9 @@ public class CoreWorkload extends Workload {
     HashSet<String> fields = null;
 
     if (!readallfields) {
-      // read a random field
-      String fieldname = fieldnames.get(fieldchooser.nextValue().intValue());
+      // read fields start from a random index
+      fields = readFields();
 
-      fields = new HashSet<String>();
-      fields.add(fieldname);
     } else if (dataintegrity || readallfieldsbyname) {
       // pass the full field list if dataintegrity is on for verification
       fields = new HashSet<String>(fieldnames);
@@ -755,11 +778,8 @@ public class CoreWorkload extends Workload {
     HashSet<String> fields = null;
 
     if (!readallfields) {
-      // read a random field
-      String fieldname = fieldnames.get(fieldchooser.nextValue().intValue());
-
-      fields = new HashSet<String>();
-      fields.add(fieldname);
+      // read fields start from a random index
+      fields = readFields();
     }
 
     HashMap<String, ByteIterator> values;
@@ -805,11 +825,8 @@ public class CoreWorkload extends Workload {
     HashSet<String> fields = null;
 
     if (!readallfields) {
-      // read a random field
-      String fieldname = fieldnames.get(fieldchooser.nextValue().intValue());
-
-      fields = new HashSet<String>();
-      fields.add(fieldname);
+      // read fields start from a random index
+      fields = readFields();
     }
 
     db.scan(table, startkeyname, len, fields, new Vector<HashMap<String, ByteIterator>>());
