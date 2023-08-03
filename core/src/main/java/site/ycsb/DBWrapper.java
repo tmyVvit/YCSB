@@ -146,6 +146,20 @@ public class DBWrapper extends DB {
     }
   }
 
+  @Override
+  public Status readByField(String table, String fieldName, String fieldValue, Set<String> readFields,
+      Map<String, ByteIterator> result) {
+    try (final TraceScope span = tracer.newScope(scopeStringRead)) {
+      long ist = measurements.getIntendedStartTimeNs();
+      long st = System.nanoTime();
+      Status res = db.readByField(table, fieldName, fieldValue, readFields, result);
+      long en = System.nanoTime();
+      measure("READBYFIELD", res, ist, st, en);
+      measurements.reportStatus("READBYFIELD", res);
+      return res;
+    }
+  }
+
   /**
    * Perform a range scan for a set of records in the database.
    * Each field/value pair from the result will be stored in a HashMap.

@@ -87,6 +87,18 @@ public class CoreWorkload extends Workload {
    * Default number of fields in a record.
    */
   public static final String FIELD_COUNT_PROPERTY_DEFAULT = "10";
+
+  /**
+   * the start index of field for read by field
+   */
+  public static final String READ_BY_FIELD_START_PROPERTY = "readbyfieldstart";
+
+  public static final String READ_FIELD_START_PROPERTY_DEFAULT = "0";
+
+  /**
+   * the end index of field for read by field
+   */
+  public static final String READ_BY_FIELD_END_PROPERTY = "readbyfieldend";
   
   private List<String> fieldnames;
 
@@ -221,6 +233,16 @@ public class CoreWorkload extends Workload {
    * The default proportion of transactions that are reads.
    */
   public static final String READ_PROPORTION_PROPERTY_DEFAULT = "0.95";
+
+  /**
+   * The name of the property for the proportion of transactions that are reads by field.
+   */
+  public static final String READBYFIELD_PROPORTION_PROPERTY = "readbyfieldproportion";
+
+  /**
+   * The default proportion of transactions that are reads by field.
+   */
+  public static final String READBYFIELD_PROPORTION_PROPERTY_DEFAULT = "0";
 
   /**
    * The name of the property for the proportion of transactions that are updates.
@@ -371,6 +393,7 @@ public class CoreWorkload extends Workload {
   protected NumberGenerator keysequence;
   protected DiscreteGenerator operationchooser;
   protected NumberGenerator keychooser;
+  protected NumberGenerator readBySpecifiedFieldChooser;
   protected NumberGenerator fieldchooser;
   protected AcknowledgedCounterGenerator transactioninsertkeysequence;
   protected NumberGenerator scanlength;
@@ -543,7 +566,11 @@ public class CoreWorkload extends Workload {
       throw new WorkloadException("Unknown request distribution \"" + requestdistrib + "\"");
     }
 
+    int readByFieldStartIdx = Integer.parseInt(p.getProperty(READ_BY_FIELD_START_PROPERTY, READ_FIELD_START_PROPERTY_DEFAULT));
+    int readByFieldEndIdx = Integer.parseInt(p.getProperty(READ_BY_FIELD_END_PROPERTY, String.valueOf(fieldcount - 1)));
+
     fieldchooser = new UniformLongGenerator(0, fieldcount - 1);
+    readBySpecifiedFieldChooser = new UniformLongGenerator(readByFieldStartIdx, readByFieldEndIdx);
 
     if (scanlengthdistrib.compareTo("uniform") == 0) {
       scanlength = new UniformLongGenerator(minscanlength, maxscanlength);
@@ -604,12 +631,11 @@ public class CoreWorkload extends Workload {
   private String buildDeterministicValue(String key, String fieldkey) {
     int size = fieldlengthgenerator.nextValue().intValue();
     StringBuilder sb = new StringBuilder(size);
-    sb.append(key);
-    sb.append(':');
-    sb.append(fieldkey);
+//    to avoid field values have the same prefix
+    sb.append(Utils.hash((key + fieldkey).hashCode()));
     while (sb.length() < size) {
       sb.append(':');
-      sb.append(sb.toString().hashCode());
+      sb.append(Utils.hash(sb.toString().hashCode()));
     }
     sb.setLength(size);
 
@@ -675,6 +701,9 @@ public class CoreWorkload extends Workload {
     switch (operation) {
     case "READ":
       doTransactionRead(db);
+      break;
+    case "READBYFIELD":
+      doTransactionReadByField(db);
       break;
     case "UPDATE":
       doTransactionUpdate(db);
@@ -766,6 +795,36 @@ public class CoreWorkload extends Workload {
 
     if (dataintegrity) {
       verifyRow(keyname, cells);
+    }
+  }
+
+  public void doTransactionReadByField(DB db) {
+    // read by field must set dataintegrity=true and field length is constant
+    // choose a random key by readBySpecifiedFieldChooser
+    String fieldName = fieldnames.get(readBySpecifiedFieldChooser.nextValue().intValue());
+
+    // choose a random key
+    long recordIndex = nextKeynum();
+    String recordKey = CoreWorkload.buildKeyName(recordIndex, zeropadding, orderedinserts);
+
+    String fieldValue = buildDeterministicValue(recordKey, fieldName);
+
+    HashSet<String> fields = null;
+
+    if (!readallfields) {
+      // read fields start from a random index
+      fields = readFields();
+
+    } else {
+      // pass the full field list if dataintegrity is on for verification
+      fields = new HashSet<String>(fieldnames);
+    }
+
+    HashMap<String, ByteIterator> cells = new HashMap<String, ByteIterator>();
+    db.readByField(table, fieldName, fieldValue, fields, cells);
+
+    if (dataintegrity) {
+      verifyRow(recordKey, cells);
     }
   }
 
@@ -881,6 +940,8 @@ public class CoreWorkload extends Workload {
     }
     final double readproportion = Double.parseDouble(
         p.getProperty(READ_PROPORTION_PROPERTY, READ_PROPORTION_PROPERTY_DEFAULT));
+    final double readbyfieldproportion = Double.parseDouble(
+        p.getProperty(READBYFIELD_PROPORTION_PROPERTY, READBYFIELD_PROPORTION_PROPERTY_DEFAULT));
     final double updateproportion = Double.parseDouble(
         p.getProperty(UPDATE_PROPORTION_PROPERTY, UPDATE_PROPORTION_PROPERTY_DEFAULT));
     final double insertproportion = Double.parseDouble(
@@ -893,6 +954,10 @@ public class CoreWorkload extends Workload {
     final DiscreteGenerator operationchooser = new DiscreteGenerator();
     if (readproportion > 0) {
       operationchooser.addValue(readproportion, "READ");
+    }
+
+    if (readbyfieldproportion > 0) {
+      operationchooser.addValue(readbyfieldproportion, "READBYFIELD");
     }
 
     if (updateproportion > 0) {

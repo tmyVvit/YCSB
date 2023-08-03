@@ -28,7 +28,9 @@ import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.InsertManyOptions;
+import com.mongodb.client.model.Projections;
 import com.mongodb.client.model.UpdateOneModel;
 import com.mongodb.client.model.UpdateOptions;
 import com.mongodb.client.result.DeleteResult;
@@ -104,6 +106,11 @@ public class MyMongoDbClient extends DB {
 
   /** If true then use updates with the upsert option for inserts. */
   private static boolean useUpsert;
+
+  /**
+   * if true, search by field will using regex match like
+   */
+  private boolean searchByFieldLike = false;
 
   /** The bulk inserts pending for the thread. */
   private final List<Document> bulkInserts = new ArrayList<Document>();
@@ -183,6 +190,8 @@ public class MyMongoDbClient extends DB {
       // Set is inserts are done as upserts. Defaults to false.
       useUpsert = Boolean.parseBoolean(
           props.getProperty("mongodb.upsert", "false"));
+
+      searchByFieldLike = Boolean.parseBoolean(props.getProperty("mongodb.regexmatch", "false"));
 
       // Just use the standard connection format URL
       // http://docs.mongodb.org/manual/reference/connection-string/
@@ -332,6 +341,40 @@ public class MyMongoDbClient extends DB {
           projection.put(field, INCLUDE);
         }
         findIterable.projection(projection);
+      }
+
+      Document queryResult = findIterable.first();
+
+      if (queryResult != null) {
+        fillMap(result, queryResult);
+      }
+      return queryResult != null ? Status.OK : Status.NOT_FOUND;
+    } catch (Exception e) {
+      System.err.println(e.toString());
+      return Status.ERROR;
+    }
+  }
+
+  @Override
+  public Status readByField(String table, String fieldName, String fieldValue, Set<String> readFields,
+      Map<String, ByteIterator> result) {
+    try {
+      MongoCollection<Document> collection = database.getCollection(table);
+
+      FindIterable<Document> findIterable;
+      if (searchByFieldLike) {
+        int len = fieldValue.length();
+        int regLen = len / 2;
+        int startIdx = 3 > len ? 0 : 3;
+        int endIdx = Math.min(startIdx + regLen, len);
+        findIterable = collection.find(Filters.regex(fieldName, fieldValue.substring(startIdx, endIdx)));
+      } else {
+        findIterable = collection.find(Filters.eq(fieldName, fieldValue));
+      }
+
+      if (readFields != null) {
+        List<String> projection = new ArrayList<>(readFields);
+        findIterable.projection(Projections.include(projection));
       }
 
       Document queryResult = findIterable.first();

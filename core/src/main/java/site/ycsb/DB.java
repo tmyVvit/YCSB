@@ -89,6 +89,20 @@ public abstract class DB {
   public abstract Status read(String table, String key, Set<String> fields, Map<String, ByteIterator> result);
 
   /**
+   * read a record from the table by specified field
+   *
+   * @param table the name of the table
+   * @param fieldName matching field name
+   * @param fieldValue matching field value
+   * @param readFields the list of fields to read, or null for all of them
+   * @param result A HashMap of field/value pairs of the results
+   * @return The result of the operation
+   */
+  public Status readByField(String table, String fieldName, String fieldValue, Set<String> readFields, Map<String, ByteIterator> result) {
+    return Status.NOT_IMPLEMENTED;
+  }
+
+  /**
    * Perform a range scan for a set of records in the database. Each field/value pair from the result will be stored
    * in a HashMap.
    *
