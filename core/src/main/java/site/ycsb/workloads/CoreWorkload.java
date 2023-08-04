@@ -265,6 +265,16 @@ public class CoreWorkload extends Workload {
   public static final String INSERT_PROPORTION_PROPERTY_DEFAULT = "0.0";
 
   /**
+   * The name of the property for the proportion of transactions that are inserts.
+   */
+  public static final String DELETE_PROPORTION_PROPERTY = "deleteproportion";
+
+  /**
+   * The default proportion of transactions that are inserts.
+   */
+  public static final String DELETE_PROPORTION_PROPERTY_DEFAULT = "0.0";
+
+  /**
    * The name of the property for the proportion of transactions that are scans.
    */
   public static final String SCAN_PROPORTION_PROPERTY = "scanproportion";
@@ -711,6 +721,9 @@ public class CoreWorkload extends Workload {
     case "INSERT":
       doTransactionInsert(db);
       break;
+    case "DELETE":
+      doTransactionDelete(db);
+      break;
     case "SCAN":
       doTransactionScan(db);
       break;
@@ -924,6 +937,15 @@ public class CoreWorkload extends Workload {
     }
   }
 
+  public void doTransactionDelete(DB db) {
+    // choose a random key
+    long keynum = nextKeynum();
+
+    String keyname = CoreWorkload.buildKeyName(keynum, zeropadding, orderedinserts);
+
+    db.delete(table, keyname);
+  }
+
   /**
    * Creates a weighted discrete values with database operations for a workload to perform.
    * Weights/proportions are read from the properties list and defaults are used
@@ -946,6 +968,8 @@ public class CoreWorkload extends Workload {
         p.getProperty(UPDATE_PROPORTION_PROPERTY, UPDATE_PROPORTION_PROPERTY_DEFAULT));
     final double insertproportion = Double.parseDouble(
         p.getProperty(INSERT_PROPORTION_PROPERTY, INSERT_PROPORTION_PROPERTY_DEFAULT));
+    final double deleteproportion = Double.parseDouble(
+        p.getProperty(DELETE_PROPORTION_PROPERTY, DELETE_PROPORTION_PROPERTY_DEFAULT));
     final double scanproportion = Double.parseDouble(
         p.getProperty(SCAN_PROPORTION_PROPERTY, SCAN_PROPORTION_PROPERTY_DEFAULT));
     final double readmodifywriteproportion = Double.parseDouble(p.getProperty(
@@ -966,6 +990,10 @@ public class CoreWorkload extends Workload {
 
     if (insertproportion > 0) {
       operationchooser.addValue(insertproportion, "INSERT");
+    }
+
+    if (deleteproportion > 0) {
+      operationchooser.addValue(deleteproportion, "DELETE");
     }
 
     if (scanproportion > 0) {
