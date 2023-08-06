@@ -36,6 +36,7 @@ import com.mongodb.client.model.UpdateOptions;
 import com.mongodb.client.result.DeleteResult;
 import com.mongodb.client.result.UpdateResult;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ThreadLocalRandom;
 import site.ycsb.ByteArrayByteIterator;
 import site.ycsb.ByteIterator;
 import site.ycsb.DB;
@@ -121,6 +122,11 @@ public class MyMongoDbClient extends DB {
   private static final String CUSTOMER_ID_FIELD = "record_key";
 
   /**
+   * field value ratio
+   */
+  private double fieldValueRatio = 1.0;
+
+  /**
    * Cleanup any state for this DB. Called once per DB instance; there is one DB
    * instance per client thread.
    */
@@ -192,6 +198,13 @@ public class MyMongoDbClient extends DB {
           props.getProperty("mongodb.upsert", "false"));
 
       searchByFieldLike = Boolean.parseBoolean(props.getProperty("mongodb.regexmatch", "false"));
+
+      fieldValueRatio = Double.parseDouble(props.getProperty("mongodb.fieldvalueratio", "1.0"));
+
+      if (fieldValueRatio <= 0 || fieldValueRatio > 1) {
+        System.err.println("mongodb.fieldvalueratio should between (0, 1.0]");
+        System.exit(1);
+      }
 
       // Just use the standard connection format URL
       // http://docs.mongodb.org/manual/reference/connection-string/
@@ -269,7 +282,9 @@ public class MyMongoDbClient extends DB {
       Document toInsert = new Document(CUSTOMER_ID_FIELD, key);
 
       for (Map.Entry<String, ByteIterator> entry : values.entrySet()) {
-        toInsert.put(entry.getKey(), entry.getValue().toString());
+        if (chooseFieldToInsert()) {
+          toInsert.put(entry.getKey(), entry.getValue().toString());
+        }
       }
 
       if (batchSize == 1) {
@@ -310,6 +325,14 @@ public class MyMongoDbClient extends DB {
       return Status.ERROR;
     }
 
+  }
+
+  private boolean chooseFieldToInsert() {
+    if (fieldValueRatio == 1.0) {
+      return true;
+    }
+    double n = ThreadLocalRandom.current().nextDouble();
+    return n < fieldValueRatio;
   }
 
   /**
