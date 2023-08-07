@@ -113,6 +113,12 @@ public class MyMongoDbClient extends DB {
    */
   private boolean searchByFieldLike = false;
 
+  /**
+   * only enable when searchByFieldLike = true
+   * if likePrefix=true, using prefix regex search: like 'abc%'
+   */
+  private boolean likePrefix = false;
+
   /** The bulk inserts pending for the thread. */
   private final List<Document> bulkInserts = new ArrayList<Document>();
 
@@ -198,6 +204,8 @@ public class MyMongoDbClient extends DB {
           props.getProperty("mongodb.upsert", "false"));
 
       searchByFieldLike = Boolean.parseBoolean(props.getProperty("mongodb.regexmatch", "false"));
+
+      likePrefix = Boolean.parseBoolean(props.getProperty("mongodb.regexprefix", "false"));
 
       fieldValueRatio = Double.parseDouble(props.getProperty("mongodb.fieldvalueratio", "1.0"));
 
@@ -386,11 +394,17 @@ public class MyMongoDbClient extends DB {
 
       FindIterable<Document> findIterable;
       if (searchByFieldLike) {
-        int len = fieldValue.length();
-        int regLen = len / 2;
-        int startIdx = 3 > len ? 0 : 3;
-        int endIdx = Math.min(startIdx + regLen, len);
-        findIterable = collection.find(Filters.regex(fieldName, fieldValue.substring(startIdx, endIdx)));
+        if (likePrefix) {
+          int endIdx = fieldValue.length() / 2;
+          String matchStr = "^" + fieldValue.substring(0, endIdx);
+          findIterable = collection.find(Filters.regex(fieldName, matchStr));
+        } else {
+          int len = fieldValue.length();
+          int regLen = len / 2;
+          int startIdx = 3 > len ? 0 : 3;
+          int endIdx = Math.min(startIdx + regLen, len);
+          findIterable = collection.find(Filters.regex(fieldName, fieldValue.substring(startIdx, endIdx)));
+        }
       } else {
         findIterable = collection.find(Filters.eq(fieldName, fieldValue));
       }
